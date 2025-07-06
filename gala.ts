@@ -391,46 +391,86 @@ async function getAuthorsFromFile(
   }
 }
 
-// Process files in parallel batches to avoid overwhelming the system
-// todo: don't batch, just have a single progress bar that updates as each file is processed (and pools them instead)
-const BATCH_SIZE = 50;
+// Process files with a concurrency limit to avoid overwhelming the system
+const CONCURRENCY_LIMIT = 50;
 
 log.header("📊 Processing Files");
+
+// Create a simple promise pool implementation
+async function processWithPool<T, R>(
+  items: T[],
+  concurrencyLimit: number,
+  processor: (item: T) => Promise<R>,
+  onProgress?: () => void,
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let completed = 0;
+
+  return new Promise((resolve) => {
+    let runningCount = 0;
+    let nextIndex = 0;
+
+    // Process the next item in the queue
+    function processNext() {
+      if (nextIndex >= items.length) {
+        if (runningCount === 0) resolve(results.filter(Boolean));
+        return;
+      }
+
+      const currentIndex = nextIndex++;
+      const item = items[currentIndex];
+
+      runningCount++;
+
+      // Process the item and handle completion
+      processor(item as T)
+        .then((result) => {
+          results[currentIndex] = result;
+          if (onProgress) onProgress();
+          completed++;
+        })
+        .catch((err) => {
+          console.error(`Error processing item: ${err.message}`);
+        })
+        .finally(() => {
+          runningCount--;
+          processNext(); // Process the next item when this one is done
+        });
+    }
+
+    // Start initial batch of promises
+    const initialBatch = Math.min(concurrencyLimit, items.length);
+    for (let i = 0; i < initialBatch; i++) {
+      processNext();
+    }
+  });
+}
 
 if (targetUser) {
   // User-specific mode: track lines per file
   const userFileContributions: Record<string, number> = {};
+  let processedCount = 0;
 
-  for (let i = 0; i < files.length; i += BATCH_SIZE) {
-    const batch = files.slice(i, i + BATCH_SIZE);
-    const batchNum = Math.floor(i / BATCH_SIZE) + 1;
-    const totalBatches = Math.ceil(files.length / BATCH_SIZE);
+  // Function to update progress
+  const updateProgress = () => {
+    processedCount++;
+    const progress = createProgressBar(processedCount, files.length);
+    process.stdout.write(`\r${progress}`);
+  };
 
-    const progress = createProgressBar(i + batch.length, files.length);
-    // Clear the line and write progress (padding ensures clean overwrite)
-    process.stdout.write(
-      `\r${chalk.blue("⚡")} Batch ${chalk.cyan(batchNum)}/${chalk.cyan(totalBatches)} ${progress}`.padEnd(
-        80,
-      ),
-    );
-
-    // Run git blame in parallel for this batch
-    const batchPromises = batch.map((file: string) =>
-      getAuthorsFromFile(file, targetUser).then((result) => ({
-        file,
-        count: result as number,
-      })),
-    );
-    const batchResults = await Promise.all(batchPromises);
-
-    // Store results for files with contributions
-    for (const { file, count } of batchResults) {
-      if (count > 0) {
-        const relativePath = relative(targetDir, file);
-        userFileContributions[relativePath] = count;
-      }
+  // Custom processor for user-specific mode
+  const processor = async (file: string) => {
+    const result = await getAuthorsFromFile(file, targetUser);
+    const count = result as number;
+    if (count > 0) {
+      const relativePath = relative(targetDir, file);
+      userFileContributions[relativePath] = count;
     }
-  }
+    return { file, count };
+  };
+
+  // Process all files with limited concurrency
+  await processWithPool(files, CONCURRENCY_LIMIT, processor, updateProgress);
 
   // Clear progress line
   console.log();
@@ -512,29 +552,25 @@ if (targetUser) {
 } else {
   // General mode: track all authors across all files
   const allAuthors: string[] = [];
+  let processedCount = 0;
 
-  for (let i = 0; i < files.length; i += BATCH_SIZE) {
-    const batch = files.slice(i, i + BATCH_SIZE);
-    const batchNum = Math.floor(i / BATCH_SIZE) + 1;
-    const totalBatches = Math.ceil(files.length / BATCH_SIZE);
+  // Function to update progress
+  const updateProgress = () => {
+    processedCount++;
+    const progress = createProgressBar(processedCount, files.length);
+    process.stdout.write(`\r$${progress}`);
+  };
 
-    const progress = createProgressBar(i + batch.length, files.length);
-    // Clear the line and write progress (padding ensures clean overwrite)
-    process.stdout.write(
-      `\r${chalk.blue("⚡")} Batch ${chalk.cyan(batchNum)}/${chalk.cyan(totalBatches)} ${progress}`.padEnd(
-        80,
-      ),
-    );
+  // Custom processor for general mode
+  const processor = async (file: string) => {
+    const result = await getAuthorsFromFile(file);
+    const authors = result as string[];
+    allAuthors.push(...authors);
+    return authors;
+  };
 
-    // Run git blame in parallel for this batch
-    const batchPromises = batch.map((file: string) => getAuthorsFromFile(file));
-    const batchResults = await Promise.all(batchPromises);
-
-    // Flatten results and add to all authors
-    for (const authors of batchResults) {
-      allAuthors.push(...(authors as string[]));
-    }
-  }
+  // Process all files with limited concurrency
+  await processWithPool(files, CONCURRENCY_LIMIT, processor, updateProgress);
 
   // Clear progress line
   console.log();

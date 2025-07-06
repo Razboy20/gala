@@ -10,8 +10,8 @@ I've found that the available tools don't provide this functionality, and I want
 - 🔍 Analyze line contributions for a specific user, or
 - 📝 Display per-file contribution breakdowns
 
-- 🚀 Parallel processing of files in batches
-- 🧠 Smart filtering of binary and generated files
+- 🚀 Parallel processing of files
+- 🧠 Filtering of binary and generated files
 - 🔧 Respects .gitignore rules automatically
 
 ## Installation
