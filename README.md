@@ -1,6 +1,6 @@
 # 🎭 GALA: Git Author Line Analyzer
 
-GALA is a command-line tool that analyzes git repository data to provide you insights about author contributions by line count.
+Gala is a command-line tool that analyzes git repository data to provide you insights about author contributions by line count.
 
 I've found that the available tools don't provide this functionality, and I wanted to create a simple, fast, and efficient way to see, at a glance, who really wrote what in a codebase.
 
@@ -16,7 +16,21 @@ I've found that the available tools don't provide this functionality, and I want
 
 ## Installation
 
-GALA is built with [Bun](https://bun.sh).
+Gala is built with [Bun](https://bun.sh).
+
+### Preferred Method (No Installation Required)
+
+Run Gala directly using Bun:
+
+```bash
+# Run directly without installation
+bunx github:razboy20/gala
+```
+
+<details>
+<summary>Manual Installation and Usage</summary>
+
+### Installation
 
 ```bash
 # Clone the repository
@@ -27,7 +41,7 @@ cd gala
 bun install
 ```
 
-## Usage
+### Usage after Manual Installation
 
 ```bash
 # Basic usage - show all authors across the current directory
@@ -44,6 +58,26 @@ bun gala.ts /path/to/repo "John Smith"
 
 # Show help information
 bun gala.ts --help
+```
+</details>
+
+## Usage
+
+```bash
+# Basic usage - show all authors across the current directory
+bunx github:razboy20/gala
+
+# Analyze a specific directory
+bunx github:razboy20/gala /path/to/project
+
+# Show specific user's contributions per file
+bunx github:razboy20/gala . "Jane Doe"
+
+# Analyze a specific user in a different directory
+bunx github:razboy20/gala /path/to/repo "John Smith"
+
+# Show help information
+bunx github:razboy20/gala --help
 ```
 
 ## Example Output
