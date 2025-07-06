@@ -1,0 +1,38 @@
+{
+  "name": "gala",
+  "version": "1.0.0",
+  "description": "Git Author Line Analyzer - Analyze git blame data to show author contributions by line count",
+  "type": "module",
+  "main": "gala.ts",
+  "bin": {
+    "gala": "gala.ts"
+  },
+  "keywords": [
+    "git",
+    "blame",
+    "analysis",
+    "contribution",
+    "statistics",
+    "cli",
+    "bun",
+    "typescript"
+  ],
+  "author": "Razboy20",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/razboy20/gala.git"
+  },
+  "engines": {
+    "bun": ">=1.0.0"
+  },
+  "dependencies": {
+    "chalk": "^5.4.1",
+    "cli-table3": "^0.6.5"
+  },
+  "devDependencies": {
+    "@tsconfig/bun": "^1.0.8",
+    "@types/bun": "^1.2.18",
+    "typescript": "^5.8.3"
+  }
+}
