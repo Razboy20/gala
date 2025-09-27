@@ -10,6 +10,13 @@ import {
   displayUserContributions,
 } from "./output.js";
 import { processWithPool } from "./processor.js";
+import {
+  cleanupTempDir,
+  cloneRepository,
+  isRemoteUrl,
+  type RemoteOptions,
+  setupCleanupHandler,
+} from "./remote.js";
 
 if (process.argv.includes("-h") || process.argv.includes("--help")) {
   console.log(`
@@ -17,15 +24,20 @@ ${chalk.bold.cyan("Gala (Git Author Line Analyzer)")}
 ${chalk.dim("Analyzes git blame data to show author contributions by line count")}
 
 ${chalk.bold("Usage:")}
-  bun gala.ts [directory] [username]
+  bun gala.ts [directory|remote-url] [username] [options]
 
 ${chalk.bold("Arguments:")}
   ${chalk.green("directory")}    Target directory to analyze (default: current directory)
                Must be a git repository
+  ${chalk.green("remote-url")}   Remote git repository URL (https://, git@, etc.)
+               Will be cloned to temporary directory
   ${chalk.green("username")}     Optional: Show per-file line count for specific user
 
 ${chalk.bold("Options:")}
-  ${chalk.yellow("-h, --help")}   Show this help message
+  ${chalk.yellow("-h, --help")}       Show this help message
+  ${chalk.yellow("--branch <name>")}  Clone specific branch (remote repos only)
+  ${chalk.yellow("--tag <name>")}     Clone specific tag (remote repos only)
+  ${chalk.yellow("--keep-clone")}     Keep cloned repository after analysis
 
 ${chalk.bold("Examples:")}
   ${chalk.dim("# Show all authors across all files")}
@@ -34,23 +46,85 @@ ${chalk.bold("Examples:")}
   ${chalk.dim("# Analyze specific directory")}
   bun gala.ts /path/to/project
 
+  ${chalk.dim("# Analyze remote repository")}
+  bun gala.ts https://github.com/user/repo
+
+  ${chalk.dim("# Analyze specific branch of remote repo")}
+  bun gala.ts https://github.com/user/repo --branch develop
+
   ${chalk.dim("# Show specific user's contributions per file")}
   bun gala.ts . "John Doe"
 
-  ${chalk.dim("# Analyze user in different directory")}
-  bun gala.ts /path/to/repo alice
+  ${chalk.dim("# Analyze user in remote repository")}
+  bun gala.ts git@github.com:user/repo.git "Jane Doe"
 `);
   process.exit(0);
 }
 
-const targetDir: string = resolve(process.argv[2] || ".");
-const targetUser: string | undefined = process.argv[3];
+// Parses command line arguments and extracts target, user, and options
+function parseArgs() {
+  const args = process.argv.slice(2);
+  const options: RemoteOptions = {};
+  const parsedArgs: { target: string; user?: string; options: RemoteOptions } =
+    {
+      target: ".",
+      options,
+    };
+
+  let i = 0;
+  while (i < args.length) {
+    const arg = args[i];
+
+    if (arg === "--branch" && i + 1 < args.length) {
+      options.branch = args[i + 1];
+      i += 2;
+    } else if (arg === "--tag" && i + 1 < args.length) {
+      options.tag = args[i + 1];
+      i += 2;
+    } else if (arg === "--keep-clone") {
+      options.keepClone = true;
+      i++;
+    } else if ((!parsedArgs.target || parsedArgs.target === ".") && arg) {
+      parsedArgs.target = arg;
+      i++;
+    } else if (!parsedArgs.user && arg) {
+      parsedArgs.user = arg;
+      i++;
+    } else {
+      i++;
+    }
+  }
+
+  return parsedArgs;
+}
+
+const { target, user: targetUser, options: remoteOptions } = parseArgs();
 
 log.header("🔍 GALA - Git Author Line Analyzer");
 
-validateDirectory(targetDir);
+// Handles remote repository vs local directory processing
+let targetDir: string;
+let isRemote = false;
+let tempDir: string | null = null;
 
-log.info(`Scanning directory: ${chalk.cyan(targetDir)}`);
+if (isRemoteUrl(target)) {
+  isRemote = true;
+  try {
+    tempDir = await cloneRepository(target, remoteOptions);
+    targetDir = tempDir;
+    setupCleanupHandler(tempDir, remoteOptions.keepClone);
+
+    log.info(`Analyzing remote repository: ${chalk.cyan(target)}`);
+  } catch (error) {
+    log.error(`Failed to clone repository: ${error}`);
+    process.exit(1);
+  }
+} else {
+  targetDir = resolve(target);
+  validateDirectory(targetDir);
+  log.info(`Scanning directory: ${chalk.cyan(targetDir)}`);
+}
+
 if (targetUser) {
   log.info(`Analyzing contributions by user: ${chalk.magenta(targetUser)}`);
 }
@@ -75,6 +149,7 @@ const CONCURRENCY_LIMIT = 50;
 
 log.header("📊 Processing Files");
 
+// Process files for specific user or all authors
 if (targetUser) {
   const userFileContributions: Record<string, number> = {};
   let processedCount = 0;
@@ -127,4 +202,12 @@ if (targetUser) {
   console.log();
 
   displayGeneralContributions(allAuthors, files.length);
+}
+
+// Cleanup temporary directory if it was a remote repository
+// Only cleanup if keepClone option is not set
+if (isRemote && tempDir && !remoteOptions.keepClone) {
+  cleanupTempDir(tempDir);
+} else if (isRemote && tempDir && remoteOptions.keepClone) {
+  log.info(`Repository kept at: ${chalk.cyan(tempDir)}`);
 }
