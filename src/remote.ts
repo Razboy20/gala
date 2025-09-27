@@ -8,7 +8,6 @@ import { log } from "./logger.js";
 export interface RemoteOptions {
   branch?: string;
   tag?: string;
-  keepClone?: boolean;
 }
 
 // Checks if the input string is a remote git repository URL
@@ -47,7 +46,10 @@ export async function cloneRepository(
   log.info(`Cloning repository: ${chalk.cyan(repoUrl)}`);
   log.info(`Target directory: ${chalk.gray(tempDir)}`);
 
-  const args = ["clone"];
+  const args = [
+    "clone",
+    "--single-branch", // Clone only the default branch
+  ];
 
   if (options.branch) {
     args.push("--branch", options.branch);
@@ -114,22 +116,14 @@ export function cleanupTempDir(tempDir: string): void {
 }
 
 // Sets up signal handlers to cleanup temporary directories on process exit
-export function setupCleanupHandler(
-  tempDir: string,
-  keepClone: boolean = false,
-): void {
+export function setupCleanupHandler(tempDir: string): void {
   const cleanup = () => {
-    if (!keepClone) {
-      log.info("\nReceived interrupt signal, cleaning up...");
-      cleanupTempDir(tempDir);
-    }
+    cleanupTempDir(tempDir);
     process.exit(0);
   };
 
   process.on("SIGINT", cleanup);
   process.on("SIGTERM", cleanup);
 
-  if (!keepClone) {
-    process.on("exit", () => cleanupTempDir(tempDir));
-  }
+  process.on("exit", () => cleanupTempDir(tempDir));
 }

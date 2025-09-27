@@ -37,7 +37,6 @@ ${chalk.bold("Options:")}
   ${chalk.yellow("-h, --help")}       Show this help message
   ${chalk.yellow("--branch <name>")}  Clone specific branch (remote repos only)
   ${chalk.yellow("--tag <name>")}     Clone specific tag (remote repos only)
-  ${chalk.yellow("--keep-clone")}     Keep cloned repository after analysis
 
 ${chalk.bold("Examples:")}
   ${chalk.dim("# Show all authors across all files")}
@@ -81,9 +80,6 @@ function parseArgs() {
     } else if (arg === "--tag" && i + 1 < args.length) {
       options.tag = args[i + 1];
       i += 2;
-    } else if (arg === "--keep-clone") {
-      options.keepClone = true;
-      i++;
     } else if ((!parsedArgs.target || parsedArgs.target === ".") && arg) {
       parsedArgs.target = arg;
       i++;
@@ -112,7 +108,7 @@ if (isRemoteUrl(target)) {
   try {
     tempDir = await cloneRepository(target, remoteOptions);
     targetDir = tempDir;
-    setupCleanupHandler(tempDir, remoteOptions.keepClone);
+    setupCleanupHandler(tempDir);
 
     log.info(`Analyzing remote repository: ${chalk.cyan(target)}`);
   } catch (error) {
@@ -205,9 +201,6 @@ if (targetUser) {
 }
 
 // Cleanup temporary directory if it was a remote repository
-// Only cleanup if keepClone option is not set
-if (isRemote && tempDir && !remoteOptions.keepClone) {
+if (isRemote && tempDir) {
   cleanupTempDir(tempDir);
-} else if (isRemote && tempDir && remoteOptions.keepClone) {
-  log.info(`Repository kept at: ${chalk.cyan(tempDir)}`);
 }

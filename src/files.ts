@@ -7,6 +7,7 @@ import { log } from "./logger.js";
 // File patterns to exclude from analysis (converted from bash globs)
 // These patterns are in addition to those ignored in .gitignore
 // Excludes binary files, dependencies, build artifacts, and other non-source files
+// TODO: make case-insensitive :facepalm: and try and actually deal with determining whether files are binaries or not just in case
 const excludePatterns: string[] = [
   // Lock files
   "**/*-lock.*",
