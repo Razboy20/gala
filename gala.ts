@@ -1,8 +1,8 @@
 #!/usr/bin/env bun
 
+import { existsSync, statSync } from "node:fs";
+import { join, relative, resolve } from "node:path";
 import { Glob } from "bun";
-import { join, resolve, relative } from "path";
-import { existsSync, statSync } from "fs";
 import chalk from "chalk";
 import Table from "cli-table3";
 
@@ -276,12 +276,12 @@ async function parseGitignore(dir: string): Promise<string[]> {
 
       // Handle directory patterns (ending with /)
       if (pattern.endsWith("/")) {
-        pattern = pattern.slice(0, -1) + "/**";
+        pattern = `${pattern.slice(0, -1)}/**`;
       }
 
       // Add ** prefix if pattern doesn't start with / or contain /
       if (!pattern.startsWith("/") && !pattern.includes("/")) {
-        pattern = "**/" + pattern;
+        pattern = `**/${pattern}`;
       }
 
       // Remove leading slash
@@ -386,7 +386,7 @@ async function getAuthorsFromFile(
 
     // Otherwise return all authors
     return authors;
-  } catch (error) {
+  } catch (_error) {
     return filterUser ? 0 : [];
   }
 }
@@ -404,7 +404,7 @@ async function processWithPool<T, R>(
   onProgress?: () => void,
 ): Promise<R[]> {
   const results: R[] = new Array(items.length);
-  let completed = 0;
+  let _completed = 0;
 
   return new Promise((resolve) => {
     let runningCount = 0;
@@ -427,7 +427,7 @@ async function processWithPool<T, R>(
         .then((result) => {
           results[currentIndex] = result;
           if (onProgress) onProgress();
-          completed++;
+          _completed++;
         })
         .catch((err) => {
           console.error(`Error processing item: ${err.message}`);
@@ -509,7 +509,7 @@ if (targetUser) {
       table.push([chalk.green(count.toLocaleString()), chalk.cyan(filepath)]);
     }
 
-    console.log("\n" + table.toString());
+    console.log(`\n${table.toString()}`);
 
     if (sortedFiles.length > 20) {
       console.log(chalk.dim(`... and ${sortedFiles.length - 20} more files\n`));
@@ -537,7 +537,7 @@ if (targetUser) {
 
   summaryTable.push(
     [
-      chalk.green("Total lines by " + targetUser),
+      chalk.green(`Total lines by ${targetUser}`),
       chalk.bold(totalUserLines.toLocaleString()),
     ],
     [
@@ -633,7 +633,7 @@ if (targetUser) {
       ]);
     });
 
-    console.log("\n" + table.toString());
+    console.log(`\n${table.toString()}`);
 
     if (sortedAuthors.length > 20) {
       console.log(
