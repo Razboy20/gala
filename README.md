@@ -1,18 +1,21 @@
-# 🎭 GALA: Git Author Line Analyzer
+<h1 align="center">Gala</h1>
+<p align="center">
+  <italic>(Git Author Line Analyzer)</italic>
+</p>
 
 Gala is a command-line tool that analyzes git repository data to provide you insights about author contributions by line count.
 
-I've found that the available tools don't provide this functionality, and I wanted to create a simple, fast, and efficient way to see, at a glance, who really wrote what in a codebase.
+I've found that the available tools don't provide this functionality, and I wanted to create a simple, fast, and efficient way to see, at a glance, **who really wrote what** in a codebase.
 
-## Features
+## What does Gala let you do?
 
-- 📊 View contributions of all authors across a repository
-- 🔍 Analyze line contributions for a specific user, or
-- 📝 Display per-file contribution breakdowns
+- View contributions of all authors across a repository
+- Analyze line contributions for a specific user, or
+- Display per-file contribution breakdowns
 
-- 🚀 Parallel processing of files
-- 🧠 Filtering of binary and generated files
-- 🔧 Respects .gitignore rules automatically
+- Parallel processing of files
+- Filtering of binary and generated files
+- Respects .gitignore rules automatically
 
 ## Installation
 
@@ -59,6 +62,7 @@ bun gala.ts /path/to/repo "John Smith"
 # Show help information
 bun gala.ts --help
 ```
+
 </details>
 
 ## Usage
@@ -155,6 +159,7 @@ GALA uses `git blame` under the hood to analyze each file in the repository. It:
 4. Aggregates statistics and presents them in a readable format
 
 It automatically handles special cases like:
+
 - Binary files (images, videos, etc.)
 - Build artifacts and dependencies
 - Files listed in .gitignore
@@ -171,7 +176,6 @@ You can modify the file exclusion patterns in the `excludePatterns` array in `ga
 - Further performance optimizations for large repositories
 - Interactive TUI mode for exploring results
 - Export to various formats (CSV, JSON, HTML)
-
 
 ## Requirements
 

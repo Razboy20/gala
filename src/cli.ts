@@ -64,39 +64,35 @@ ${chalk.bold("Examples:")}
 function parseArgs() {
   const args = process.argv.slice(2);
   const options: RemoteOptions = {};
-  const parsedArgs: { target: string; user?: string; options: RemoteOptions } =
-    {
-      target: ".",
-      options,
-    };
+  let target: string | undefined;
+  let user: string | undefined;
 
-  let i = 0;
-  while (i < args.length) {
-    const arg = args[i];
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i] as string;
 
     if (arg === "--branch" && i + 1 < args.length) {
       options.branch = args[i + 1];
-      i += 2;
+      i++;
     } else if (arg === "--tag" && i + 1 < args.length) {
       options.tag = args[i + 1];
-      i += 2;
-    } else if ((!parsedArgs.target || parsedArgs.target === ".") && arg) {
-      parsedArgs.target = arg;
       i++;
-    } else if (!parsedArgs.user && arg) {
-      parsedArgs.user = arg;
-      i++;
-    } else {
-      i++;
+    } else if (!arg.startsWith("-")) {
+      if (target === ".") {
+        target = arg;
+      } else if (!user) {
+        user = arg;
+      }
     }
   }
 
-  return parsedArgs;
+  if (!target) target = ".";
+
+  return { target, user, options };
 }
 
 const { target, user: targetUser, options: remoteOptions } = parseArgs();
 
-log.header("🔍 GALA - Git Author Line Analyzer");
+log.header("Gala");
 
 // Handles remote repository vs local directory processing
 let targetDir: string;
