@@ -161,8 +161,38 @@ const excludePatterns: string[] = [
   "**/*.orig",
 ];
 
-// Validates that the given directory exists and is a git repository
-export function validateDirectory(dir: string): void {
+// Uses git to locate the repository root from the provided path
+async function findGitRoot(dir: string): Promise<string | null> {
+  try {
+    const proc = Bun.spawn(["git", "rev-parse", "--show-toplevel"], {
+      cwd: dir,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+
+    const [stdout, stderr] = await Promise.all([
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+    ]);
+
+    await proc.exited;
+
+    if (proc.exitCode === 0) {
+      return stdout.trim();
+    }
+
+    if (stderr.trim()) {
+      log.dim(`git rev-parse output: ${stderr.trim()}`);
+    }
+  } catch (error) {
+    log.dim(`git rev-parse failed: ${String(error)}`);
+  }
+
+  return null;
+}
+
+// Validates that the given directory exists and resolves the git repository root
+export async function resolveGitRepository(dir: string): Promise<string> {
   if (!existsSync(dir)) {
     log.error(`Directory "${chalk.cyan(dir)}" does not exist`);
     process.exit(1);
@@ -173,11 +203,30 @@ export function validateDirectory(dir: string): void {
     process.exit(1);
   }
 
-  const gitDir = join(dir, ".git");
-  if (!existsSync(gitDir)) {
-    log.error(`"${chalk.cyan(dir)}" is not a git repository`);
-    process.exit(1);
+  const gitGlob = new Glob("{.git,**/.git}");
+  let hasGitMetadata = false;
+
+  for await (const match of gitGlob.scan(dir)) {
+    if (match) {
+      hasGitMetadata = true;
+      break;
+    }
   }
+
+  const repoRoot = await findGitRoot(dir);
+  if (repoRoot) {
+    return repoRoot;
+  }
+
+  if (hasGitMetadata) {
+    log.error(
+      `"${chalk.cyan(dir)}" contains git metadata but the repository root could not be resolved`,
+    );
+  } else {
+    log.error(`"${chalk.cyan(dir)}" is not inside a git repository`);
+  }
+
+  process.exit(1);
 }
 
 // Reads and parses .gitignore files to extract ignore patterns

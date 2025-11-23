@@ -2,7 +2,7 @@
 
 import { relative, resolve } from "node:path";
 import chalk from "chalk";
-import { findFiles, parseGitignore, validateDirectory } from "./files.js";
+import { findFiles, parseGitignore, resolveGitRepository } from "./files.js";
 import { getAuthorsFromFile } from "./git.js";
 import { createProgressBar, log } from "./logger.js";
 import {
@@ -112,8 +112,13 @@ if (isRemoteUrl(target)) {
     process.exit(1);
   }
 } else {
-  targetDir = resolve(target);
-  validateDirectory(targetDir);
+  const resolvedTarget = resolve(target);
+  targetDir = await resolveGitRepository(resolvedTarget);
+
+  if (targetDir !== resolvedTarget) {
+    log.info(`Detected git repository root: ${chalk.cyan(targetDir)}`);
+  }
+
   log.info(`Scanning directory: ${chalk.cyan(targetDir)}`);
 }
 
