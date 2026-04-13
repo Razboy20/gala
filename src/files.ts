@@ -159,6 +159,9 @@ const excludePatterns: string[] = [
   "**/*.bak",
   "**/*.backup",
   "**/*.orig",
+
+  // Tool-specific generated files
+  "**/worker-configuration.d.ts",
 ];
 
 // Uses git to locate the repository root from the provided path
