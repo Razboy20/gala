@@ -34,9 +34,11 @@ ${chalk.bold("Arguments:")}
   ${chalk.green("username")}     Optional: Show per-file line count for specific user
 
 ${chalk.bold("Options:")}
-  ${chalk.yellow("-h, --help")}       Show this help message
-  ${chalk.yellow("--branch <name>")}  Clone specific branch (remote repos only)
-  ${chalk.yellow("--tag <name>")}     Clone specific tag (remote repos only)
+  ${chalk.yellow("-h, --help")}            Show this help message
+  ${chalk.yellow("--branch <name>")}       Clone specific branch (remote repos only)
+  ${chalk.yellow("--tag <name>")}          Clone specific tag (remote repos only)
+  ${chalk.yellow("-e, --exclude <glob>")}  Exclude files/directories matching glob
+                        (repeatable, e.g. -e "docs/**" -e "**/*.test.ts")
 
 ${chalk.bold("Examples:")}
   ${chalk.dim("# Show all authors across all files")}
@@ -64,6 +66,7 @@ ${chalk.bold("Examples:")}
 function parseArgs() {
   const args = process.argv.slice(2);
   const options: RemoteOptions = {};
+  const excludes: string[] = [];
   let target: string | undefined;
   let user: string | undefined;
 
@@ -76,8 +79,11 @@ function parseArgs() {
     } else if (arg === "--tag" && i + 1 < args.length) {
       options.tag = args[i + 1];
       i++;
+    } else if ((arg === "-e" || arg === "--exclude") && i + 1 < args.length) {
+      excludes.push(args[i + 1] as string);
+      i++;
     } else if (!arg.startsWith("-")) {
-      if (target === ".") {
+      if (!target) {
         target = arg;
       } else if (!user) {
         user = arg;
@@ -87,10 +93,15 @@ function parseArgs() {
 
   if (!target) target = ".";
 
-  return { target, user, options };
+  return { target, user, options, excludes };
 }
 
-const { target, user: targetUser, options: remoteOptions } = parseArgs();
+const {
+  target,
+  user: targetUser,
+  options: remoteOptions,
+  excludes: extraExcludes,
+} = parseArgs();
 
 log.header("Gala");
 
@@ -133,7 +144,13 @@ if (gitignorePatterns.length > 0) {
   );
 }
 
-const files: string[] = await findFiles(targetDir);
+if (extraExcludes.length > 0) {
+  log.info(
+    `Excluding ${chalk.yellow(extraExcludes.length)} extra pattern(s): ${chalk.dim(extraExcludes.join(", "))}`,
+  );
+}
+
+const files: string[] = await findFiles(targetDir, extraExcludes);
 
 console.log(`Found ${chalk.green(files.length)} files to analyze...`);
 

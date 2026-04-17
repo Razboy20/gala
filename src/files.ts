@@ -279,12 +279,42 @@ export async function parseGitignore(dir: string): Promise<string[]> {
   return gitignorePatterns;
 }
 
+// Converts user-friendly exclude inputs (e.g. "node_modules", "docs/", "src/fixtures")
+// into glob patterns suitable for Bun.Glob. Inputs that already contain glob
+// metacharacters (*, ?, [) are passed through unchanged aside from a leading slash strip.
+function normalizeExcludePattern(pattern: string): string {
+  let result = pattern.trim();
+
+  if (result.startsWith("/")) {
+    result = result.slice(1);
+  }
+
+  if (result.endsWith("/")) {
+    result = result.slice(0, -1);
+  }
+
+  if (!result) return result;
+
+  const hasGlob = /[*?[]/.test(result);
+  if (hasGlob) return result;
+
+  if (!result.includes("/")) {
+    return `**/${result}/**`;
+  }
+
+  return `${result}/**`;
+}
+
 // Finds all files in the target directory, excluding patterns from .gitignore and built-in excludes
-export async function findFiles(targetDir: string): Promise<string[]> {
+export async function findFiles(
+  targetDir: string,
+  extraExcludes: string[] = [],
+): Promise<string[]> {
   const gitignorePatterns: string[] = await parseGitignore(targetDir);
   const allExcludePatterns: string[] = [
     ...excludePatterns,
     ...gitignorePatterns,
+    ...extraExcludes.map(normalizeExcludePattern).filter(Boolean),
   ];
 
   const glob = new Glob("**/*");
