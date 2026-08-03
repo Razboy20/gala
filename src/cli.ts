@@ -2,7 +2,7 @@
 
 import { relative, resolve } from "node:path";
 import chalk from "chalk";
-import { findFiles, parseGitignore, resolveGitRepository } from "./files.js";
+import { findFiles, resolveGitRepository } from "./files.js";
 import { type BlameDepth, getAuthorsFromFile } from "./git.js";
 import { createProgressBar, log } from "./logger.js";
 import {
@@ -153,13 +153,6 @@ if (isRemoteUrl(target)) {
 
 if (targetUser) {
   log.info(`Analyzing contributions by user: ${chalk.magenta(targetUser)}`);
-}
-
-const gitignorePatterns: string[] = await parseGitignore(targetDir);
-if (gitignorePatterns.length > 0) {
-  log.success(
-    `Loaded ${chalk.yellow(gitignorePatterns.length)} patterns from .gitignore`,
-  );
 }
 
 if (extraExcludes.length > 0) {

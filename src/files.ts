@@ -232,53 +232,6 @@ export async function resolveGitRepository(dir: string): Promise<string> {
   process.exit(1);
 }
 
-// Reads and parses .gitignore files to extract ignore patterns
-// Converts gitignore patterns to glob patterns for file matching
-export async function parseGitignore(dir: string): Promise<string[]> {
-  const gitignorePatterns: string[] = [];
-
-  try {
-    const gitignoreFile = Bun.file(join(dir, ".gitignore"));
-    const exists = await gitignoreFile.exists();
-
-    if (!exists) {
-      return gitignorePatterns;
-    }
-
-    const gitignoreContent = await gitignoreFile.text();
-
-    for (let line of gitignoreContent.split("\n")) {
-      line = line.trim();
-
-      if (!line || line.startsWith("#")) continue;
-
-      let pattern = line;
-
-      if (pattern.startsWith("!")) {
-        continue;
-      }
-
-      if (pattern.endsWith("/")) {
-        pattern = `${pattern.slice(0, -1)}/**`;
-      }
-
-      if (!pattern.startsWith("/") && !pattern.includes("/")) {
-        pattern = `**/${pattern}`;
-      }
-
-      if (pattern.startsWith("/")) {
-        pattern = pattern.slice(1);
-      }
-
-      gitignorePatterns.push(pattern);
-    }
-  } catch (error) {
-    log.dim(`Note: Could not read .gitignore (${error})`);
-  }
-
-  return gitignorePatterns;
-}
-
 // Converts user-friendly exclude inputs (e.g. "node_modules", "docs/", "src/fixtures")
 // into glob patterns suitable for Bun.Glob. Inputs that already contain glob
 // metacharacters (*, ?, [) are passed through unchanged aside from a leading slash strip.
@@ -329,40 +282,52 @@ function normalizeIncludePatterns(pattern: string): string[] {
   return [result, `${result}/**`];
 }
 
-// Finds all files in the target directory, excluding patterns from .gitignore and built-in excludes
+async function listTrackedFiles(targetDir: string): Promise<string[]> {
+  const proc = Bun.spawn(["git", "ls-files", "--cached", "-z"], {
+    cwd: targetDir,
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const [exitCode, stdout, stderr] = await Promise.all([
+    proc.exited,
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+  ]);
+
+  if (exitCode !== 0) {
+    const detail = stderr.trim() || `git exited with code ${exitCode}`;
+    throw new Error(`Could not list tracked files: ${detail}`);
+  }
+
+  return [...new Set(stdout.split("\0").filter(Boolean))];
+}
+
 export async function findFiles(
   targetDir: string,
   extraExcludes: string[] = [],
   includes: string[] = [],
 ): Promise<string[]> {
-  const gitignorePatterns: string[] = await parseGitignore(targetDir);
-  const allExcludePatterns: string[] = [
+  const trackedFiles = listTrackedFiles(targetDir);
+  const excludeGlobs = [
     ...excludePatterns,
-    ...gitignorePatterns,
     ...extraExcludes.map(normalizeExcludePattern).filter(Boolean),
-  ];
-  const includePatterns = includes.flatMap(normalizeIncludePatterns);
-
-  const glob = new Glob("**/*");
+  ].map((pattern) => new Glob(pattern));
+  const includeGlobs = includes
+    .flatMap(normalizeIncludePatterns)
+    .map((pattern) => new Glob(pattern));
   const files: string[] = [];
 
-  for await (const file of glob.scan(targetDir)) {
-    const shouldExclude = allExcludePatterns.some((pattern: string) => {
-      const excludeGlob = new Glob(pattern);
-      return excludeGlob.match(file);
-    });
-
+  for (const file of await trackedFiles) {
+    const shouldExclude = excludeGlobs.some((glob) => glob.match(file));
     const shouldInclude =
-      includePatterns.length === 0 ||
-      includePatterns.some((pattern) => new Glob(pattern).match(file));
+      includeGlobs.length === 0 ||
+      includeGlobs.some((glob) => glob.match(file));
 
     if (!shouldExclude && shouldInclude) {
       const fullPath = join(targetDir, file);
-      try {
-        if (existsSync(fullPath) && statSync(fullPath).isFile()) {
-          files.push(fullPath);
-        }
-      } catch {}
+      if (statSync(fullPath, { throwIfNoEntry: false })?.isFile()) {
+        files.push(fullPath);
+      }
     }
   }
 
