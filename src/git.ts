@@ -1,6 +1,11 @@
 import { relative } from "node:path";
 
 export type BlameDepth = 0 | 1 | 2 | 3 | 4;
+export type AuthorHistogram = Record<string, number>;
+
+export function createAuthorHistogram(): AuthorHistogram {
+  return Object.create(null) as AuthorHistogram;
+}
 
 export function buildBlameArgs(
   relativePath: string,
@@ -17,41 +22,39 @@ export function buildBlameArgs(
   ];
 }
 
-// Extracts author information from a file using git blame
-// Returns either an array of all authors or a count for a specific user
-export async function getAuthorsFromFile(
+export function parseAuthorHistogram(output: string): AuthorHistogram {
+  const histogram = createAuthorHistogram();
+
+  for (const match of output.matchAll(/^author (.+)$/gm)) {
+    const author = match[1];
+    if (author?.trim()) {
+      histogram[author] = (histogram[author] ?? 0) + 1;
+    }
+  }
+
+  return histogram;
+}
+
+export async function getAuthorHistogram(
   filepath: string,
   targetDir: string,
-  filterUser?: string,
   blameDepth: BlameDepth = 2,
-): Promise<string[] | number> {
+): Promise<AuthorHistogram | null> {
   try {
     const relativePath = relative(targetDir, filepath);
-
     const proc = Bun.spawn(buildBlameArgs(relativePath, blameDepth), {
       cwd: targetDir,
       stdout: "pipe",
       stderr: "pipe",
     });
+    const [exitCode, output] = await Promise.all([
+      proc.exited,
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+    ]);
 
-    const output = await new Response(proc.stdout).text();
-    await proc.exited;
-
-    const authors: string[] = [];
-    const lines = output.split("\n");
-
-    for (const line of lines) {
-      if (line.startsWith("author ")) {
-        authors.push(line.substring(7));
-      }
-    }
-
-    if (filterUser) {
-      return authors.filter((author) => author === filterUser).length;
-    }
-
-    return authors;
+    return exitCode === 0 ? parseAuthorHistogram(output) : null;
   } catch (_error) {
-    return filterUser ? 0 : [];
+    return null;
   }
 }

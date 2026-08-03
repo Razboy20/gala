@@ -82,16 +82,9 @@ export function displayUserContributions(
 
 // Displays general author contributions across all files
 export function displayGeneralContributions(
-  allAuthors: string[],
+  authorCounts: Record<string, number>,
   filesCount: number,
 ): void {
-  const authorCounts: Record<string, number> = {};
-  for (const author of allAuthors) {
-    if (author.trim()) {
-      authorCounts[author] = (authorCounts[author] || 0) + 1;
-    }
-  }
-
   const sortedAuthors: [string, number][] = Object.entries(authorCounts).sort(
     ([, a], [, b]) => b - a,
   );
@@ -160,7 +153,11 @@ export function displayGeneralContributions(
   summaryTable.push(
     [
       chalk.green("Total lines analyzed"),
-      chalk.bold(allAuthors.length.toLocaleString()),
+      chalk.bold(
+        Object.values(authorCounts)
+          .reduce((total, count) => total + count, 0)
+          .toLocaleString(),
+      ),
     ],
     [chalk.blue("Unique authors"), chalk.bold(sortedAuthors.length.toString())],
     [chalk.gray("Files processed"), chalk.bold(filesCount.toString())],

@@ -2,8 +2,14 @@
 
 import { relative, resolve } from "node:path";
 import chalk from "chalk";
+import { openBlameCache } from "./cache.js";
 import { findFiles, resolveGitRepository } from "./files.js";
-import { type BlameDepth, getAuthorsFromFile } from "./git.js";
+import {
+  type AuthorHistogram,
+  type BlameDepth,
+  createAuthorHistogram,
+  getAuthorHistogram,
+} from "./git.js";
 import { createProgressBar, log } from "./logger.js";
 import {
   displayGeneralContributions,
@@ -43,6 +49,8 @@ ${chalk.bold("Options:")}
                         (repeatable; exclusions still take precedence)
   ${chalk.yellow("--blame-depth <0-4>")}   Copy/move detection depth (default: 2)
                         0 fastest; 4 most thorough
+  ${chalk.yellow("--verbose")}             Show cache path, status, and hit/miss details
+  ${chalk.yellow("--refresh-cache")}       Rebuild the local repository cache
 
 ${chalk.bold("Examples:")}
   ${chalk.dim("# Show all authors across all files")}
@@ -73,6 +81,8 @@ function parseArgs() {
   const excludes: string[] = [];
   const includes: string[] = [];
   let blameDepth: BlameDepth = 2;
+  let verbose = false;
+  let refreshCache = false;
   let target: string | undefined;
   let user: string | undefined;
 
@@ -98,6 +108,10 @@ function parseArgs() {
       }
       blameDepth = value as BlameDepth;
       i++;
+    } else if (arg === "--verbose") {
+      verbose = true;
+    } else if (arg === "--refresh-cache") {
+      refreshCache = true;
     } else if (!arg.startsWith("-")) {
       if (!target) {
         target = arg;
@@ -109,7 +123,16 @@ function parseArgs() {
 
   if (!target) target = ".";
 
-  return { target, user, options, excludes, includes, blameDepth };
+  return {
+    target,
+    user,
+    options,
+    excludes,
+    includes,
+    blameDepth,
+    verbose,
+    refreshCache,
+  };
 }
 
 const {
@@ -119,6 +142,8 @@ const {
   excludes: extraExcludes,
   includes,
   blameDepth,
+  verbose,
+  refreshCache,
 } = parseArgs();
 
 log.header("Gala");
@@ -173,6 +198,40 @@ log.info(
 
 const files: string[] = await findFiles(targetDir, extraExcludes, includes);
 
+const cache = isRemote
+  ? null
+  : await openBlameCache(targetDir, blameDepth, {
+      refresh: refreshCache,
+      onWarning: (warning) => log.warn(warning),
+    });
+
+if (verbose) {
+  if (cache) {
+    log.info(`Cache path: ${chalk.dim(cache.path)}`);
+    log.info(`Cache status: ${chalk.yellow(cache.status)}`);
+    log.info(
+      `Cache invalidation: ${chalk.dim(cache.invalidationReason ?? "none")}`,
+    );
+  } else {
+    log.info("Cache status: bypassed for temporary remote clone");
+  }
+}
+
+async function histogramForFile(file: string): Promise<AuthorHistogram> {
+  const relativePath = relative(targetDir, file);
+  const lookup = cache
+    ? await cache.lookup(relativePath, file)
+    : { digest: null, histogram: null };
+  if (lookup.histogram) return lookup.histogram;
+
+  const histogram = await getAuthorHistogram(file, targetDir, blameDepth);
+  if (!histogram) return createAuthorHistogram();
+  if (cache) {
+    await cache.record(relativePath, file, lookup.digest, histogram);
+  }
+  return histogram;
+}
+
 console.log(`Found ${chalk.green(files.length)} files to analyze...`);
 
 if (files.length === 0) {
@@ -186,7 +245,7 @@ log.header("📊 Processing Files");
 
 // Process files for specific user or all authors
 if (targetUser) {
-  const userFileContributions: Record<string, number> = {};
+  const userFileContributions = Object.create(null) as Record<string, number>;
   let processedCount = 0;
 
   const updateProgress = () => {
@@ -196,15 +255,10 @@ if (targetUser) {
   };
 
   const processor = async (file: string) => {
-    const result = await getAuthorsFromFile(
-      file,
-      targetDir,
-      targetUser,
-      blameDepth,
-    );
-    const count = result as number;
+    const relativePath = relative(targetDir, file);
+    const histogram = await histogramForFile(file);
+    const count = histogram[targetUser] ?? 0;
     if (count > 0) {
-      const relativePath = relative(targetDir, file);
       userFileContributions[relativePath] = count;
     }
     return { file, count };
@@ -214,6 +268,11 @@ if (targetUser) {
 
   console.log();
 
+  await cache?.save();
+  if (verbose && cache) {
+    log.info(`Cache hits: ${cache.stats.hits}; misses: ${cache.stats.misses}`);
+  }
+
   displayUserContributions(
     userFileContributions,
     targetUser,
@@ -221,7 +280,7 @@ if (targetUser) {
     files.length,
   );
 } else {
-  const allAuthors: string[] = [];
+  const authorCounts = createAuthorHistogram();
   let processedCount = 0;
 
   const updateProgress = () => {
@@ -231,22 +290,23 @@ if (targetUser) {
   };
 
   const processor = async (file: string) => {
-    const result = await getAuthorsFromFile(
-      file,
-      targetDir,
-      undefined,
-      blameDepth,
-    );
-    const authors = result as string[];
-    allAuthors.push(...authors);
-    return authors;
+    const histogram = await histogramForFile(file);
+    for (const [author, count] of Object.entries(histogram)) {
+      authorCounts[author] = (authorCounts[author] ?? 0) + count;
+    }
+    return histogram;
   };
 
   await processWithPool(files, CONCURRENCY_LIMIT, processor, updateProgress);
 
   console.log();
 
-  displayGeneralContributions(allAuthors, files.length);
+  await cache?.save();
+  if (verbose && cache) {
+    log.info(`Cache hits: ${cache.stats.hits}; misses: ${cache.stats.misses}`);
+  }
+
+  displayGeneralContributions(authorCounts, files.length);
 }
 
 // Cleanup temporary directory if it was a remote repository

@@ -102,6 +102,17 @@ bunx github:razboy20/gala -i "src/**" -i "packages/**" -e "**/*.test.ts"
 | `3` | Also copies into created files (`-C -C`) | More thorough |
 | `4` | Copies across all history (`-C -C -C`) | Most thorough |
 
+### Incremental cache
+
+Local repository analysis automatically caches successful per-file blame results in the repository's Git metadata directory. Unchanged files are reused across runs, while dirty files and paths changed by linear commits are recalculated. Remote URL clones are never cached.
+
+Caching is quiet by default. Use `--verbose` to show the cache path, status, invalidation reason, and hit/miss counts. Use `--refresh-cache` to discard the existing manifest and force a cold analysis:
+
+```bash
+bunx github:razboy20/gala . --verbose
+bunx github:razboy20/gala . --refresh-cache
+```
+
 ## Example Output
 
 ### All Authors Mode
@@ -173,7 +184,7 @@ GALA uses `git blame` under the hood to analyze each file in the repository. It:
 
 1. Scans the repository for files, excluding those in .gitignore and common binary formats
 2. Processes files in parallel batches for improved performance
-3. Parses git blame output to extract author information
+3. Parses git blame output into per-author line counts
 4. Aggregates statistics and presents them in a readable format
 
 It automatically handles special cases like:
