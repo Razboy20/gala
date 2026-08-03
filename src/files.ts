@@ -305,10 +305,35 @@ function normalizeExcludePattern(pattern: string): string {
   return `${result}/**`;
 }
 
+function normalizeIncludePatterns(pattern: string): string[] {
+  let result = pattern.trim();
+
+  if (result.startsWith("/")) {
+    result = result.slice(1);
+  }
+
+  if (!result) return [];
+
+  if (result.endsWith("/")) {
+    return [`${result.slice(0, -1)}/**`];
+  }
+
+  if (/[*?[]/.test(result)) {
+    return [result];
+  }
+
+  if (!result.includes("/")) {
+    return [`**/${result}`, `**/${result}/**`];
+  }
+
+  return [result, `${result}/**`];
+}
+
 // Finds all files in the target directory, excluding patterns from .gitignore and built-in excludes
 export async function findFiles(
   targetDir: string,
   extraExcludes: string[] = [],
+  includes: string[] = [],
 ): Promise<string[]> {
   const gitignorePatterns: string[] = await parseGitignore(targetDir);
   const allExcludePatterns: string[] = [
@@ -316,6 +341,7 @@ export async function findFiles(
     ...gitignorePatterns,
     ...extraExcludes.map(normalizeExcludePattern).filter(Boolean),
   ];
+  const includePatterns = includes.flatMap(normalizeIncludePatterns);
 
   const glob = new Glob("**/*");
   const files: string[] = [];
@@ -326,7 +352,11 @@ export async function findFiles(
       return excludeGlob.match(file);
     });
 
-    if (!shouldExclude) {
+    const shouldInclude =
+      includePatterns.length === 0 ||
+      includePatterns.some((pattern) => new Glob(pattern).match(file));
+
+    if (!shouldExclude && shouldInclude) {
       const fullPath = join(targetDir, file);
       try {
         if (existsSync(fullPath) && statSync(fullPath).isFile()) {

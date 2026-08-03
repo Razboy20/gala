@@ -84,6 +84,24 @@ bunx github:razboy20/gala /path/to/repo "John Smith"
 bunx github:razboy20/gala --help
 ```
 
+### Filtering and blame tracing
+
+Use `--include` to limit analysis to matching files or directories. It is repeatable, and exclusions always take precedence:
+
+```bash
+bunx github:razboy20/gala -i "src/**" -i "packages/**" -e "**/*.test.ts"
+```
+
+`--blame-depth` balances speed against attribution through refactors. The default, `2`, preserves Gala’s previous `git blame -M -C -w` behavior.
+
+| Depth | Git blame detection | Trade-off |
+| --- | --- | --- |
+| `0` | None (`-w` only) | Fastest |
+| `1` | Moves within a file (`-M`) | Faster |
+| `2` | Copies across files (`-C`) | Default |
+| `3` | Also copies into created files (`-C -C`) | More thorough |
+| `4` | Copies across all history (`-C -C -C`) | Most thorough |
+
 ## Example Output
 
 ### All Authors Mode

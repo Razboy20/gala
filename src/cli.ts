@@ -3,7 +3,7 @@
 import { relative, resolve } from "node:path";
 import chalk from "chalk";
 import { findFiles, parseGitignore, resolveGitRepository } from "./files.js";
-import { getAuthorsFromFile } from "./git.js";
+import { type BlameDepth, getAuthorsFromFile } from "./git.js";
 import { createProgressBar, log } from "./logger.js";
 import {
   displayGeneralContributions,
@@ -39,6 +39,10 @@ ${chalk.bold("Options:")}
   ${chalk.yellow("--tag <name>")}          Clone specific tag (remote repos only)
   ${chalk.yellow("-e, --exclude <glob>")}  Exclude files/directories matching glob
                         (repeatable, e.g. -e "docs/**" -e "**/*.test.ts")
+  ${chalk.yellow("-i, --include <glob>")}  Include only matching files/directories
+                        (repeatable; exclusions still take precedence)
+  ${chalk.yellow("--blame-depth <0-4>")}   Copy/move detection depth (default: 2)
+                        0 fastest; 4 most thorough
 
 ${chalk.bold("Examples:")}
   ${chalk.dim("# Show all authors across all files")}
@@ -67,6 +71,8 @@ function parseArgs() {
   const args = process.argv.slice(2);
   const options: RemoteOptions = {};
   const excludes: string[] = [];
+  const includes: string[] = [];
+  let blameDepth: BlameDepth = 2;
   let target: string | undefined;
   let user: string | undefined;
 
@@ -82,6 +88,16 @@ function parseArgs() {
     } else if ((arg === "-e" || arg === "--exclude") && i + 1 < args.length) {
       excludes.push(args[i + 1] as string);
       i++;
+    } else if ((arg === "-i" || arg === "--include") && i + 1 < args.length) {
+      includes.push(args[i + 1] as string);
+      i++;
+    } else if (arg === "--blame-depth" && i + 1 < args.length) {
+      const value = Number(args[i + 1]);
+      if (!Number.isInteger(value) || value < 0 || value > 4) {
+        throw new Error("--blame-depth must be an integer from 0 to 4");
+      }
+      blameDepth = value as BlameDepth;
+      i++;
     } else if (!arg.startsWith("-")) {
       if (!target) {
         target = arg;
@@ -93,7 +109,7 @@ function parseArgs() {
 
   if (!target) target = ".";
 
-  return { target, user, options, excludes };
+  return { target, user, options, excludes, includes, blameDepth };
 }
 
 const {
@@ -101,6 +117,8 @@ const {
   user: targetUser,
   options: remoteOptions,
   excludes: extraExcludes,
+  includes,
+  blameDepth,
 } = parseArgs();
 
 log.header("Gala");
@@ -150,7 +168,17 @@ if (extraExcludes.length > 0) {
   );
 }
 
-const files: string[] = await findFiles(targetDir, extraExcludes);
+if (includes.length > 0) {
+  log.info(
+    `Including ${chalk.yellow(includes.length)} pattern(s): ${chalk.dim(includes.join(", "))}`,
+  );
+}
+
+log.info(
+  `Using blame depth ${chalk.yellow(blameDepth)} (0 fastest, 4 most thorough)`,
+);
+
+const files: string[] = await findFiles(targetDir, extraExcludes, includes);
 
 console.log(`Found ${chalk.green(files.length)} files to analyze...`);
 
@@ -175,7 +203,12 @@ if (targetUser) {
   };
 
   const processor = async (file: string) => {
-    const result = await getAuthorsFromFile(file, targetDir, targetUser);
+    const result = await getAuthorsFromFile(
+      file,
+      targetDir,
+      targetUser,
+      blameDepth,
+    );
     const count = result as number;
     if (count > 0) {
       const relativePath = relative(targetDir, file);
@@ -205,7 +238,12 @@ if (targetUser) {
   };
 
   const processor = async (file: string) => {
-    const result = await getAuthorsFromFile(file, targetDir);
+    const result = await getAuthorsFromFile(
+      file,
+      targetDir,
+      undefined,
+      blameDepth,
+    );
     const authors = result as string[];
     allAuthors.push(...authors);
     return authors;
